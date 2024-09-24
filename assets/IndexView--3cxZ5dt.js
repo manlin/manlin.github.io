@@ -1,0 +1,1 @@
+import{_ as e,c,o}from"./index-VQ-ekdSp.js";const t={},s={class:"sites-collection-view"};function n(_,a){return o(),c("div",s,"Sites Collection")}const r=e(t,[["render",n],["__scopeId","data-v-42191989"]]);export{r as default};
