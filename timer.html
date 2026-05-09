@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>iOS 悬浮时钟</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      background: #000;
+      color: #fff;
+      font-family: 'SF Mono', 'Menlo', 'Monaco', 'Consolas', monospace;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      overflow: hidden;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .time-display {
+      font-size: 46px;
+      font-weight: bold;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 2px;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    .date-display {
+      font-size: 18px;
+      color: rgba(255, 255, 255, 0.6);
+      text-align: center;
+      margin-bottom: 40px;
+    }
+
+    .pip-hint {
+      font-size: 14px;
+      color: rgba(255, 255, 255, 0.4);
+      text-align: center;
+      padding: 12px 24px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .pip-hint:active {
+      background: rgba(255, 255, 255, 0.1);
+      transform: scale(0.98);
+    }
+
+    .pip-hint.hidden {
+      display: none;
+    }
+
+    #clockCanvas {
+      display: none;
+    }
+
+    video {
+      position: absolute;
+      opacity: 0;
+      pointer-events: none;
+      width: 1px;
+      height: 1px;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="clockCanvas" width="400" height="200"></canvas>
+  <video id="pipVideo" autoplay playsinline webkit-playsinline muted></video>
+
+  <div class="time-display" id="timeDisplay">00:00:00</div>
+  <div class="date-display" id="dateDisplay">1970年1月1日</div>
+  <div class="pip-hint" id="pipHint" onclick="startPiP()">
+    点击开启悬浮时钟
+  </div>
+
+  <script>
+    const timeDisplay = document.getElementById('timeDisplay');
+    const dateDisplay = document.getElementById('dateDisplay');
+    const pipHint = document.getElementById('pipHint');
+    const clockCanvas = document.getElementById('clockCanvas');
+    const pipVideo = document.getElementById('pipVideo');
+    const ctx = clockCanvas.getContext('2d');
+
+    let mediaStream = null;
+    let isPiPActive = false;
+
+    function initStream() {
+      if (mediaStream) return;
+      mediaStream = clockCanvas.captureStream(30);
+      pipVideo.srcObject = mediaStream;
+      pipVideo.play().catch(() => {});
+    }
+
+    function updateTime() {
+      const now = new Date();
+      const h = String(now.getHours()).padStart(2, '0');
+      const m = String(now.getMinutes()).padStart(2, '0');
+      const s = String(now.getSeconds()).padStart(2, '0');
+      const ms = String(now.getMilliseconds()).padStart(3, '0');
+
+      const timeStr = `${h}:${m}:${s}.${ms}`;
+      timeDisplay.innerText = timeStr;
+
+      const year = now.getFullYear();
+      const month = now.getMonth() + 1;
+      const date = now.getDate();
+      const weekDay = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][now.getDay()];
+      dateDisplay.innerText = `${year}年${month}月${date}日 ${weekDay}`;
+
+      drawClockCanvas(timeStr);
+    }
+
+    function drawClockCanvas(timeStr) {
+      const width = 400;
+      const height = 200;
+
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = 'bold 56px SF Mono, Menlo, Monaco, Consolas, monospace';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(timeStr, width / 2, height / 2);
+    }
+
+    async function startPiP() {
+      try {
+        if (pipVideo.readyState < 2) {
+          if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+          }
+          mediaStream = clockCanvas.captureStream(30);
+          pipVideo.srcObject = mediaStream;
+          await pipVideo.play();
+        }
+
+        if (pipVideo.readyState < 2) {
+          alert('视频尚未就绪，请稍后再试');
+          return;
+        }
+
+        if (pipVideo.webkitPresentationMode === 'picture-in-picture') {
+          pipVideo.webkitSetPresentationMode('picture-in-picture');
+          pipHint.classList.add('hidden');
+          isPiPActive = true;
+        } else if (document.pictureInPictureEnabled) {
+          pipVideo.requestPictureInPicture().then(() => {
+            pipHint.classList.add('hidden');
+            isPiPActive = true;
+          }).catch(err => {
+            console.error('PiP 启动失败:', err);
+            alert('画中画模式启动失败，请确保在 Safari 中打开并允许画中画权限');
+          });
+        }
+      } catch (err) {
+        console.error('PiP 启动失败:', err);
+        alert('画中画模式启动失败，请确保在 Safari 中打开并允许画中画权限');
+      }
+    }
+
+    function checkPiPState() {
+      if (document.pictureInPictureElement !== pipVideo && isPiPActive) {
+        isPiPActive = false;
+        pipHint.classList.remove('hidden');
+      }
+    }
+
+    pipVideo.addEventListener('enterpictureinpicture', () => {
+      isPiPActive = true;
+      pipHint.classList.add('hidden');
+    });
+
+    pipVideo.addEventListener('leavepictureinpicture', () => {
+      isPiPActive = false;
+      pipHint.classList.remove('hidden');
+    });
+
+    setInterval(checkPiPState, 1000);
+    setInterval(updateTime, 1);
+    initStream();
+    updateTime();
+  </script>
+</body>
+</html>
